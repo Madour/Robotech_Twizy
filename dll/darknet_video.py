@@ -17,22 +17,31 @@ def convertBack(x, y, w, h):
 
 def cvDrawBoxes(detections, img):
     for detection in detections:
-        # detection [0] = label
-        # detection [1] = precision
-        # detection [2] = (x_center, y_center, width, height)
+        label = detection[0] 
+        precision = detection[1] 
+        box = detection[2]
 
-        x, y = detection[2][0], detection[2][1]
-        w, h = detection[2][2], detection[2][3]
+        x, y = box[0], box[1]
+        w, h = box[2], box[3]
         xmin, ymin, xmax, ymax = convertBack(
             float(x), float(y), float(w), float(h))
         pt1 = (xmin, ymin)
         pt2 = (xmax, ymax)
-        cv2.rectangle(img, pt1, pt2, (0, 255, 0), 1)
+
+        color = (0, 255, 0)
+        if precision < 0.6:
+            color = (255, 255, 0)
+        elif precision < 0.4:
+            color = (255, 153, 51)
+        elif precision < 0.2:
+            color = (128, 0, 0)
+
+        cv2.rectangle(img, pt1, pt2, color, 1)
         cv2.putText(img,
-                    detection[0].decode() +
-                    " [" + str(round(detection[1] * 100, 2)) + "]",
-                    (pt1[0], pt1[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    [0, 255, 0], 2)
+                    label.decode() +
+                    " [" + str(round(precision * 100, 2)) + "]",
+                    (pt1[0], pt1[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4,
+                    color, 1)
     return img
 
 
@@ -117,11 +126,13 @@ def YOLO(cfgPath=None, wgtPath=None, mtPath=None):
         detections = darknet.detect_image(netMain, metaMain, darknet_image, thresh=0.25)
         image = cvDrawBoxes(detections, frame_resized)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image = cv2.resize(image, ( int(cap.get(3)), int(cap.get(4)) ), interpolation=cv2.INTER_LINEAR)
+        image = cv2.resize(image, ( int(cap.get(3))*2, int(cap.get(4))*2 ), interpolation=cv2.INTER_LINEAR)
         
         #prints FPS
         #print(cap.get(5))
-        print(1.0/(time.time()-prev_time))
+        cv2.putText(image,
+                    str(round(1.0/(time.time()-prev_time), 2))+" FPS",
+                    (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.75, [255, 255, 255], 2, bottomLeftOrigin=False)
         
         cv2.imshow('YOLO', image)
         cv2.waitKey(3)
