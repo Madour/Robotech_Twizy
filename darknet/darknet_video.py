@@ -1,11 +1,20 @@
 from ctypes import *
+from collections import namedtuple
 import math
 import random
 import os
 import cv2
 import numpy as np
 import time
-import dll.darknet as darknet
+import darknet.core as darknet
+
+detected_objects = []
+Vect2 = namedtuple('Vect2', 'x y')
+
+class yolo_obj(object):
+    def __init__(self, d):
+        self.__dict__ = d
+
 
 def convertBack(x, y, w, h):
     xmin = int(round(x - (w / 2)))
@@ -14,34 +23,40 @@ def convertBack(x, y, w, h):
     ymax = int(round(y + (h / 2)))
     return xmin, ymin, xmax, ymax
 
+def get_detection_data(detection):
+    label = detection[0] 
+    precision = detection[1] 
+    box = detection[2]
+    x, y = box[0], box[1]
+    w, h = box[2], box[3]
+    xmin, ymin, xmax, ymax = convertBack(float(x), float(y), float(w), float(h))
+    obj = yolo_obj({
+            'label': detection[0], 
+            'precision':detection[1], 
+            'pos':Vect2(xmin, ymin),
+            'size':Vect2(w, h),
+            'center':Vect2(x, y)
+    })
+    return obj
 
-def cvDrawBoxes(detections, img):
-    for detection in detections:
-        label = detection[0] 
-        precision = detection[1] 
-        box = detection[2]
+def cvDrawBox(obj, img):
+    pt1 = (int(obj.pos.x), int(obj.pos.y))
+    pt2 = (int(obj.pos.x+obj.size.x), int(obj.pos.y+obj.size.y))
 
-        x, y = box[0], box[1]
-        w, h = box[2], box[3]
-        xmin, ymin, xmax, ymax = convertBack(
-            float(x), float(y), float(w), float(h))
-        pt1 = (xmin, ymin)
-        pt2 = (xmax, ymax)
+    color = (0, 255, 0)
+    if obj.precision < 0.6:
+        color = (255, 255, 0)
+    elif obj.precision < 0.4:
+        color = (255, 153, 51)
+    elif obj.precision < 0.2:
+        color = (128, 0, 0)
 
-        color = (0, 255, 0)
-        if precision < 0.6:
-            color = (255, 255, 0)
-        elif precision < 0.4:
-            color = (255, 153, 51)
-        elif precision < 0.2:
-            color = (128, 0, 0)
-
-        cv2.rectangle(img, pt1, pt2, color, 1)
-        cv2.putText(img,
-                    label.decode() +
-                    " [" + str(round(precision * 100, 2)) + "]",
-                    (pt1[0], pt1[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4,
-                    color, 1)
+    cv2.rectangle(img, pt1, pt2, color, 1)
+    cv2.putText(img,
+                obj.label.decode() +
+                " [" + str(round(obj.precision * 100, 2)) + "]",
+                (pt1[0], pt1[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4,
+                color, 1)
     return img
 
 
@@ -52,14 +67,17 @@ altNames = None
 
 def YOLO(cfgPath=None, wgtPath=None, mtPath=None):
 
-    global metaMain, netMain, altNames
-    configPath = "./cfg/yolov3.cfg"
-    weightPath = "./weights/yolov3.weights"
-    metaPath = "./cfg/coco.data"
+    global metaMain, netMain, altNames, detected_objects
+
     if(cfgPath and wgtPath and mtPath):
         configPath = cfgPath
         weightPath = wgtPath
         metaPath = mtPath
+    else:
+        configPath = "./cfg/yolov3-tiny.cfg"
+        weightPath = "./weights/yolov3-tiny.weights"
+        metaPath = "./cfg/coco.data"
+    
 
     if not os.path.exists(configPath):
         raise ValueError("Invalid config path `" +
@@ -71,8 +89,7 @@ def YOLO(cfgPath=None, wgtPath=None, mtPath=None):
         raise ValueError("Invalid data file path `" +
                          os.path.abspath(metaPath)+"`")
     if netMain is None:
-        netMain = darknet.load_net_custom(configPath.encode(
-            "ascii"), weightPath.encode("ascii"), 0, 1)  # batch size = 1
+        netMain = darknet.load_net_custom(configPath.encode("ascii"), weightPath.encode("ascii"), 0, 1)  # batch size = 1
     if metaMain is None:
         metaMain = darknet.load_meta(metaPath.encode("ascii"))
     if altNames is None:
@@ -95,15 +112,15 @@ def YOLO(cfgPath=None, wgtPath=None, mtPath=None):
                     pass
         except Exception:
             pass
+    
     cap = cv2.VideoCapture(0)
     #cap = cv2.VideoCapture("test.mp4")
     if( not cap.isOpened()) :
+        print("Unable to open camera")
         return -1;
-    #cap.set(3, 1280)
-    #cap.set(4, 720)
-    #out = cv2.VideoWriter(
-    #    "output.avi", cv2.VideoWriter_fourcc(*"MJPG"), 10.0,
-    #    (darknet.network_width(netMain), darknet.network_height(netMain)))
+    #cap.set(3, 800)
+    #cap.set(4, 800)
+    #out = cv2.VideoWriter("output.avi", cv2.VideoWriter_fourcc(*"MJPG"), 5.5, (int(cap.get(3)*2), int(cap.get(4)*2)) )
     print("Starting the YOLO loop...")
 
     # Create an image we reuse for each detect
@@ -118,24 +135,38 @@ def YOLO(cfgPath=None, wgtPath=None, mtPath=None):
                                    (darknet.network_width(netMain), darknet.network_height(netMain)),
                                    interpolation=cv2.INTER_LINEAR)
         
-        #print((darknet.network_width(netMain), darknet.network_height(netMain)), frame_rgb.size, frame_resized.size)
-
-        #darknet.copy_image_from_bytes(darknet_image,frame_resized.tobytes())
         darknet.copy_image_from_bytes(darknet_image,frame_resized.tobytes())
 
+        # we collect YOLO detections
         detections = darknet.detect_image(netMain, metaMain, darknet_image, thresh=0.25)
-        image = cvDrawBoxes(detections, frame_resized)
+
+        image = frame_resized
+
+        # parsing detections and drawing boxes
+        for detection in detections:
+            obj = get_detection_data(detection)
+            image = cvDrawBox(obj, image)
+            print(obj.label, obj.center, obj.size)
+            detected_objects.append(obj)
+
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image = cv2.resize(image, ( int(cap.get(3))*2, int(cap.get(4))*2 ), interpolation=cv2.INTER_LINEAR)
+        image = cv2.resize(image, ( int(cap.get(3)*2), int(cap.get(4)*2) ), interpolation=cv2.INTER_LINEAR)
         
-        #prints FPS
-        #print(cap.get(5))
-        cv2.putText(image,
-                    str(round(1.0/(time.time()-prev_time), 2))+" FPS",
+
+        # display FPS text
+        cv2.putText(image, str(round(1.0/(time.time()-prev_time), 2))+" FPS",
                     (5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.75, [255, 255, 255], 2, bottomLeftOrigin=False)
         
         cv2.imshow('YOLO', image)
-        cv2.waitKey(3)
+        # out.write(image)
+
+        print("----------")
+
+        detected_objects = []
+
+        key = cv2.waitKey(33)
+        if key == 27 : break
+
     cap.release()
     #out.release()
 

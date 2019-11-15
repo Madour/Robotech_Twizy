@@ -1,7 +1,18 @@
-from dll.darknet_video import YOLO
+import darknet
 
 # détection avec YOLO à partir de la webcam
-YOLO(cfgPath = "./cfg/yolov3.cfg",
-     wgtPath = "./weights/yolov3.weights",
-      mtPath = "./cfg/coco.data"
-    )
+
+# initialisation
+detector = darknet.yolo.YOLO(
+			cfgPath = "./cfg/yolov3.cfg",
+            wgtPath = "./weights/yolov3.weights",
+            mtPath  = "./cfg/coco.data"
+            )
+
+detector = darknet.yolo.YOLO()
+
+# loading the network
+detector.load()
+
+# starting webcam detection
+detector.start(display_window=True)

@@ -1,5 +1,6 @@
-dll/__pychache__
+yolo/__pycache__
 __pycache__
+*.pyc
 .git
 weights
-
+*.avi

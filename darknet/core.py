@@ -78,12 +78,16 @@ class METADATA(Structure):
 #lib = CDLL("/home/pjreddie/documents/darknet/libdarknet.so", RTLD_GLOBAL)
 #lib = CDLL("libdarknet.so", RTLD_GLOBAL)
 hasGPU = True
+
+# os.name == "nt" for windows, and "posix" for linux
 if os.name == "nt":
+    # check for existing dll for yolo
     cwd = os.path.dirname(__file__)
     os.environ['PATH'] = cwd + ';' + os.environ['PATH']
     winGPUdll = os.path.join(cwd, "yolo_cpp_dll.dll")
     winNoGPUdll = os.path.join(cwd, "yolo_cpp_dll_nogpu.dll")
     envKeys = list()
+    # get enveronnement variables
     for k, v in os.environ.items():
         envKeys.append(k)
     try:
@@ -104,8 +108,6 @@ if os.name == "nt":
                     raise ValueError("ForceCPU")
             except NameError:
                 pass
-            # print(os.environ.keys())
-            # print("FORCE_CPU flag undefined, proceeding with GPU")
         if not os.path.exists(winGPUdll):
             raise ValueError("NoDLL")
         lib = CDLL(winGPUdll, RTLD_GLOBAL)
@@ -120,7 +122,9 @@ if os.name == "nt":
             lib = CDLL(winGPUdll, RTLD_GLOBAL)
             print("Environment variables indicated a CPU run, but we didn't find `"+winNoGPUdll+"`. Trying a GPU run anyway.")
 else:
+    # for anything that is not windows (linux and macOS)
     lib = CDLL("./libdarknet.so", RTLD_GLOBAL)
+
 lib.network_width.argtypes = [c_void_p]
 lib.network_width.restype = c_int
 lib.network_height.argtypes = [c_void_p]
@@ -299,6 +303,7 @@ netMain = None
 metaMain = None
 altNames = None
 
+# detection for ONE image
 def performDetect(imagePath="data/street.jpg", thresh= 0.25, configPath = "./cfg/yolov3.cfg", weightPath = "yolov3.weights", metaPath= "./cfg/coco.data", showImage= True, makeImageOnly = False, initOnly= False):
     """
     Convenience function to handle the detection and returns of objects.
