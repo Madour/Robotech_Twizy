@@ -31,6 +31,7 @@ def convertBack(x, y, w, h):
     return xmin, ymin, xmax, ymax
 
 def get_detection_data(detection):
+    list = []
     label = detection[0] 
     precision = detection[1] 
     box = detection[2]
@@ -75,6 +76,8 @@ class YOLO(object):
         self.altNames = None
         self.detected_objects = []
 
+        self.danger_objects = ["person", "cat", "dog", "car", "bicycle", "motorbike", "bus", "train", "truck"]
+
         if(cfgPath and wgtPath and mtPath):
             self.configPath = cfgPath
             self.weightPath = wgtPath
@@ -85,15 +88,13 @@ class YOLO(object):
             self.metaPath = "./cfg/coco.data"
     
 
+        # check for config files
         if not os.path.exists(self.configPath):
-            raise ValueError("Invalid config path `" +
-                             os.path.abspath(self.configPath)+"`")
+            raise ValueError("Invalid config path `" + os.path.abspath(self.configPath)+"`")
         if not os.path.exists(self.weightPath):
-            raise ValueError("Invalid weight path `" +
-                             os.path.abspath(self.weightPath)+"`")
+            raise ValueError("Invalid weight path `" + os.path.abspath(self.weightPath)+"`")
         if not os.path.exists(self.metaPath):
-            raise ValueError("Invalid data file path `" +
-                             os.path.abspath(self.metaPath)+"`")
+            raise ValueError("Invalid data file path `" + os.path.abspath(self.metaPath)+"`")
         
         if autostart:
             self.load()
@@ -139,7 +140,6 @@ class YOLO(object):
             print("Unable to open camera")
             return -1;
         self.camera_size = Vect2(int(cap.get(3)),  int(cap.get(4)))
-
         #cap.set(3, 800)
         #cap.set(4, 800)
         #out = cv2.VideoWriter("output.avi", cv2.VideoWriter_fourcc(*"MJPG"), 5.5, (int(cap.get(3)*2), int(cap.get(4)*2)) )
@@ -158,7 +158,7 @@ class YOLO(object):
             
             darknet.copy_image_from_bytes(darknet_image,frame_resized.tobytes())
     
-            # we collect YOLO detections
+            # collect YOLO detections
             detections = darknet.detect_image(self.netMain, self.metaMain, darknet_image, thresh=0.25)
             
             for detection in detections:
@@ -192,8 +192,17 @@ class YOLO(object):
     def process(self):
         # write here how to analyze and interpret detected_objects
         # hint: we need to get the real size of detected objects
-        # it is actually not easy ...
+        danger = None
+
         for detected_object in self.detected_objects:
-            # do some stuf with detected_object
-            pass
-        print("----------")
+            # do some stuff with detected_object
+            #example: 
+            if detected_object.label in self.danger_objects and detected_object.size.x*100/darknet.network_width(self.netMain) >= 40:
+                danger = detected_object.label
+
+        if danger:
+            print("/!\ DANGER /!\ ", danger, "ON THE ROAD")
+        else:
+            print("All safe !")
+
+
