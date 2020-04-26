@@ -4,12 +4,10 @@ import darknet.yolo as dn
 
 # initialisation
 detector = dn.YOLO(
-			cfgPath = "./cfg/yolov3.cfg",
-            wgtPath = "./weights/yolov3.weights",
-            mtPath  = "./cfg/coco.data"
+			cfgFile = "./cfg/yolov3.cfg",
+            wgtFile = "./weights/yolov3.weights",
+            mtFile  = "./cfg/coco.data"
             )
-
-#detector = darknet.yolo.YOLO()
 
 # loading the network
 detector.load()
